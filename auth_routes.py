@@ -1,9 +1,11 @@
-from fastapi import APIRouter
+from fastapi import APIRouter,status,Depends
 from database import Session, engine
-from schema import SignUpModel
+from schema import SignUpModel,LoginModel
 from models import User
 from fastapi.exceptions import HTTPException
 from werkzeug.security import generate_password_hash,check_password_hash
+from fastapi_jwt_auth import AuthJWT
+from fastapi.encoders import jsonable_encoder
 
 
 auth_router = APIRouter(
@@ -44,5 +46,14 @@ async def signup(user: SignUpModel):
 
     return new_user
 
+#LOGIN
 
-    
+auth_router.post('/login'):
+async def login(user:LoginModel,Authorize:AuthJWT=Depends()):
+    db_user=session.query(User).filter(User.username==user.username).first()
+
+    if db_user and check_password_hash(db_user.password,user.password):
+        access_token=Authorize.create_access_token(subject=db_user.username)
+        refresh_token=Authorize.create_refresh_token(subject=db_user.username)
+
+
