@@ -1,4 +1,5 @@
 from fastapi import APIRouter,status,Depends
+from fastapi.exceptions import HTTPException
 from database import Session, engine
 from schema import SignUpModel,LoginModel
 from models import User
@@ -16,7 +17,12 @@ auth_router = APIRouter(
 
 session = Session(bind=engine)
 @auth_router.get('/')
-async def hello():
+async def hello(Authorize:AuthJWT=Depends()):
+    try:
+        Authorize.jwt_required()
+    except Exception as e:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Token has expired")
     return {"message": "Hello World"}
 
 @auth_router.post('/signup',
@@ -48,7 +54,8 @@ async def signup(user: SignUpModel):
 
 #LOGIN
 
-auth_router.post('/login'):
+@auth_router.post('/login',
+    status_code=200)
 async def login(user:LoginModel,Authorize:AuthJWT=Depends()):
     db_user=session.query(User).filter(User.username==user.username).first()
 
@@ -57,3 +64,29 @@ async def login(user:LoginModel,Authorize:AuthJWT=Depends()):
         refresh_token=Authorize.create_refresh_token(subject=db_user.username)
 
 
+        response={
+            "access":access_token,
+            "refresh":refresh_token
+        }
+
+        return jsonable_encoder(response)
+    
+    raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST,
+        detail="Invalid username or password")
+
+
+@auth_router.get('/refresh')
+async def refresh_token(Authorize:AuthJWT=Depends()):
+
+    try:
+        Authorize.jwt_refresh_token_required()
+
+    except Exception as e:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Please provide a valid refresh token")
+
+    current_user=Authorize.get_jwt_subject()
+
+    new_access_token=Authorize.create_access_token(subject=current_user)
+
+    return jsonable_encoder{"access":new_access_token}
